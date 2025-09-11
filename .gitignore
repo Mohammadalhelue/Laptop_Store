@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+db.sqlite3
+media/
+static/
+staticfiles/
+Thumbs.db
+.env
+.venv
+.venv/
+venv/
+*.pyc
