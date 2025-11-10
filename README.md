@@ -36,5 +36,3 @@ Includes ready-to-use API endpoints, initial migrations, and sample data seeding
 ✅ Ready for frontend integration  
 ✅ Works out-of-the-box with PyCharm + Python 3.13  
 ```
-
-Would you like me to also add a **Postman usage example** (with image upload) in the README, or keep it minimal?
