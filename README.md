@@ -17,10 +17,9 @@ Includes ready-to-use API endpoints, initial migrations, and sample data seeding
    ```bash
    pip install -r requirements.txt
    ```
-3. Run migrations & seed data:
+3. Run migrations:
    ```bash
    python manage.py migrate
-   python manage.py seed_sample_data
    python manage.py createsuperuser
    ```
 4. Start server:
