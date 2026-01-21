@@ -8,15 +8,19 @@ from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 from rest_framework.authentication import TokenAuthentication, SessionAuthentication
 from rest_framework.parsers import JSONParser, FormParser, MultiPartParser
+from django.shortcuts import get_object_or_404
+from .models import Accessory, SearchHistory, Order, OrderItem
+from .carts import Cart
 
-from .models import Accessory, SearchHistory
 from .serializers import (
     AccessorySerializer,
-    UserSerializer,
     RegisterSerializer,
-    SearchHistorySerializer,
     LoginSerializer,
+    CartAddAccessorySerializer,
+    CartItemSerializer,
+    OrderSerializer,
 )
+
 
 # Disable CSRF enforcement for session-authenticated API requests (so browsable API forms work)
 class CsrfExemptSessionAuthentication(SessionAuthentication):
@@ -37,8 +41,6 @@ class LoginView(APIView):
                 'user_id': user.pk,
                 'username': user.username,
                 'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name
             }, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -57,15 +59,6 @@ class RegisterView(generics.CreateAPIView):
     permission_classes = [AllowAny]
 
 
-class MeView(generics.RetrieveAPIView):
-    serializer_class = UserSerializer
-    authentication_classes = [CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get_object(self):
-        return self.request.user
-
-
 class AccessoryViewSet(viewsets.ModelViewSet):
     queryset = Accessory.objects.all().order_by('-created_at')
     serializer_class = AccessorySerializer
@@ -75,7 +68,6 @@ class AccessoryViewSet(viewsets.ModelViewSet):
     parser_classes = [JSONParser, FormParser, MultiPartParser]
 
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    # NOTE: if 'category' is a FK, change to 'category__name' in the future
     search_fields = ['name', 'description', 'category']
     ordering_fields = ['price', 'created_at', 'name']
 
@@ -119,7 +111,7 @@ class AccessoryViewSet(viewsets.ModelViewSet):
             return Response({"message": "تمت عملية الشراء بنجاح", "remaining": accessory.stock})
         return Response({"error": "المنتج غير متوفر"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # --- Standard RESTful handlers for API clients ---
+    # Standard RESTful handlers for API clients
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -139,26 +131,19 @@ class AccessoryViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         instance.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
-    # ------------------------------------------------
 
-    # ---------- Make the DEFAULT browsable forms work on the detail URL ----------
-    # Our custom router (in urls.py) maps POST on the detail URL to this method.
-    # We read the hidden _method and perform the right action without relying on proxy overrides.
     def method_override(self, request, *args, **kwargs):
         override = (request.data.get('_method') or request.query_params.get('_method') or '').upper()
         if override == 'PUT':
             kwargs['partial'] = False
             return self.update(request, *args, **kwargs)
         if override == 'PATCH' or override == '':
-            # Treat missing _method as partial update from the form
             kwargs['partial'] = True
             return self.update(request, *args, **kwargs)
         if override == 'DELETE':
             return self.destroy(request, *args, **kwargs)
         return Response({'detail': 'Unsupported _method.'}, status=status.HTTP_405_METHOD_NOT_ALLOWED)
-    # ---------------------------------------------------------------------------
 
-    # Fallback convenience actions (already working for you)
     @action(detail=True, methods=['post'], url_path='edit')
     def edit(self, request, pk=None):
         instance = self.get_object()
@@ -170,7 +155,6 @@ class AccessoryViewSet(viewsets.ModelViewSet):
             return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # Accept GET and POST so clicking the link or submitting the form both delete
     @action(detail=True, methods=['get', 'post'], url_path='do-delete')
     def do_delete(self, request, pk=None):
         instance = self.get_object()
@@ -178,43 +162,71 @@ class AccessoryViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class SearchHistoryView(generics.ListAPIView):
-    serializer_class = SearchHistorySerializer
-    authentication_classes = [CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return SearchHistory.objects.filter(user=self.request.user).order_by('-created_at')[:20]
-
-
 class RecommendationsView(APIView):
     authentication_classes = [CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        last = SearchHistory.objects.filter(user=request.user).order_by('-created_at').first()
+        last = SearchHistory.objects.filter(user=request.user).order_by('-created_at').all()
         if not last:
             return Response({'detail': 'No search history'}, status=status.HTTP_200_OK)
-        terms = [t for t in last.query.split() if len(t) > 1][:5]
+        terms = [t.query for t in last]
         if not terms:
             return Response({'detail': 'No useful terms in last query'}, status=status.HTTP_200_OK)
-        q = Q()
+        q = Accessory.objects.filter(category__icontains=terms[0])
+
         for t in terms:
-            q |= Q(name__icontains=t) | Q(description__icontains=t) | Q(category__icontains=t)
-        results = Accessory.objects.filter(q).distinct()[:20]
-        serializer = AccessorySerializer(results, many=True)
-        return Response({'based_on': last.query, 'results': serializer.data})
+            q |= (Accessory.objects.filter(name__icontains=t) |
+                  Accessory.objects.filter(description__icontains=t) |
+                  Accessory.objects.filter(category__icontains=t))
+
+        serializer = AccessorySerializer(q, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-# Keep this endpoint since your project urls import it (now accepts GET/POST/DELETE)
-@api_view(['DELETE', 'POST', 'GET'])
-@authentication_classes([CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication])
-@permission_classes([IsAuthenticated])
-def delete_accessory(request, pk):
-    try:
-        accessory = Accessory.objects.get(pk=pk)
-    except Accessory.DoesNotExist:
-        return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
-    accessory.delete()
-    return Response(status=status.HTTP_204_NO_CONTENT)
+class CartAPIView(APIView):
+    authentication_classes = [CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        cart = Cart(request)
+        serializer = CartItemSerializer(list(cart), many=True)
+        return Response({"cart": serializer.data, "total": cart.get_total_price()})
+
+
+class CartAddUpdateAPIView(APIView):
+    authentication_classes = [CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, accessory_id):
+        cart = Cart(request)
+        accessory = get_object_or_404(Accessory, id=accessory_id)
+        serializer = CartAddAccessorySerializer(data=request.data)
+        if serializer.is_valid():
+            cart.add(accessory=accessory, **serializer.validated_data)
+            return Response({"message": "Cart updated"})
+        return Response(serializer.errors, status=400)
+
+
+class OrderCreateAPIView(APIView):
+    authentication_classes = [CsrfExemptSessionAuthentication, SessionAuthentication, TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        cart = Cart(request)
+        if not cart.cart:
+            return Response({"error": "Cart is empty"}, status=400)
+
+        serializer = OrderSerializer(data=request.data)
+        if serializer.is_valid():
+            order = serializer.save()
+            for item in cart:
+                OrderItem.objects.create(
+                    order=order,
+                    accessory=item['accessory'],  # Matches renamed key
+                    price=item['price'],
+                    quantity=item['quantity']
+                )
+            cart.clear()
+            return Response(serializer.data, status=201)
+        return Response(serializer.errors, status=400)

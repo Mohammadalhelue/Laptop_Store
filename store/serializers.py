@@ -1,8 +1,9 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model,authenticate
-from .models import Accessory, SearchHistory
+from django.contrib.auth import get_user_model, authenticate
+from .models import Accessory, SearchHistory, Order, OrderItem
 
 User = get_user_model()
+
 
 class LoginSerializer(serializers.Serializer):
     username = serializers.CharField()
@@ -26,7 +27,6 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError('يجب إدخال اسم المستخدم وكلمة المرور.')
 
         return data
-
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -55,13 +55,13 @@ class AccessorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Accessory
         fields = (
-        'id', 'name', 'slug', 'description', 'category', 'price', 'stock', 'image', 'created_at', 'updated_at')
+            'id', 'name', 'slug', 'description', 'category', 'price', 'stock', 'image', 'created_at', 'updated_at')
 
     def create(self, validated_data):
         # auto-generate slug if not provided
         from django.utils.text import slugify
         if not validated_data.get('slug'):
-            base = validated_data.get('name', 'item')
+            base = validated_data.get('name', 'accessory')
             validated_data['slug'] = slugify(base)
         return super().create(validated_data)
 
@@ -70,3 +70,34 @@ class SearchHistorySerializer(serializers.ModelSerializer):
     class Meta:
         model = SearchHistory
         fields = ('id', 'query', 'created_at')
+
+
+class CartAddAccessorySerializer(serializers.Serializer):
+    quantity = serializers.IntegerField(min_value=1, default=1)
+    override = serializers.BooleanField(required=False, default=False)
+
+
+class CartItemSerializer(serializers.Serializer):
+    accessory = AccessorySerializer()
+    price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    quantity = serializers.IntegerField()
+    total_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
+class OrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = OrderItem
+        fields = ['accessory', 'price', 'quantity']
+
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    total_cost = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = ['id', 'first_name', 'last_name', 'email', 'address',
+                  'postal_code', 'city', 'items', 'total_cost']
+
+    def get_total_cost(self, obj):
+        return obj.get_total_cost()

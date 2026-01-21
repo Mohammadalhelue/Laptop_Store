@@ -5,9 +5,9 @@ from corsheaders.defaults import default_methods, default_headers
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-key')
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
-#ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+# ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
-ALLOWED_HOSTS = ['alhelue.pythonanywhere.com','127.0.0.1','localhost']
+ALLOWED_HOSTS = ['alhelue.pythonanywhere.com', '127.0.0.1', 'localhost']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -73,7 +73,7 @@ TIME_ZONE = 'Europe/Amsterdam'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = '/static/'
+STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -87,7 +87,7 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [
 
-        #'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+        # 'rest_framework.permissions.IsAuthenticatedOrReadOnly',
         'rest_framework.permissions.AllowAny',
 
     ],
@@ -117,13 +117,13 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 CORS_ALLOW_HEADERS = list(default_headers) + ['authorization']  # للسماح ب Authorization header
 CORS_ALLOW_CREDENTIALS = True  # لو تحتاج إرسال Cookies (عادة لا للـJWT)
-CORS_EXPOSE_HEADERS = ['Content-Type','X-CSRFToken']
+CORS_EXPOSE_HEADERS = ['Content-Type', 'X-CSRFToken']
 
 session_cookie_samesite = True
 csrf_cookie_samesite = True
 
 # لو DEBUG=False وتستعمل session-auth وتحتاج CSRF:
-CSRF_TRUSTED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000','https://alhelue.pythonanywhere.com']
+CSRF_TRUSTED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000', 'https://alhelue.pythonanywhere.com']
 CORS_ALLOW_METHODS = [
     "GET",
     "POST",
@@ -132,7 +132,6 @@ CORS_ALLOW_METHODS = [
     "DELETE",
     "OPTIONS",
 ]
-
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CSRF_TRUSTED_ORIGINS = ["https://alhelue.pythonanywhere.com"]
